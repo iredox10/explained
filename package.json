@@ -15,7 +15,10 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-icons": "^5.5.0",
+    "react-quill": "^2.0.0-beta.4",
     "react-router-dom": "^7.7.1",
+    "suneditor": "^2.47.6",
+    "suneditor-react": "^3.6.1",
     "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
