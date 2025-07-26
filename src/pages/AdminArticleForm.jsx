@@ -1,13 +1,25 @@
+
+// src/pages/AdminArticleForm.js
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { MOCK_DATA } from '../data/mockData';
-// Import SunEditor
+import { MOCK_DATA } from '../data/mockData'; // We still use this for dropdowns
+import { useAuth } from '../context/AuthContext';
+import { databases, storage } from '../appwrite'; // Import storage
+import { ID, Permission, Role } from 'appwrite';
 import SunEditor from 'suneditor-react';
-import 'suneditor/dist/css/suneditor.min.css'; // Import SunEditor styles
+import 'suneditor/dist/css/suneditor.min.css';
+
+// --- Appwrite Configuration ---
+// TODO: Replace with your actual Database and Collection IDs
+
+const DATABASE_ID = '6885112e000227dd70e8';
+const ARTICLES_COLLECTION_ID = '68853dd5002eaf879e95';
+const IMAGE_BUCKET_ID = '6885418f0020cc88b27f'; // Add your Bucket ID here
 
 export default function AdminArticleForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isEditing = id !== 'new';
 
   const [articleData, setArticleData] = useState({
@@ -15,32 +27,63 @@ export default function AdminArticleForm() {
     author: '',
     category: '',
     excerpt: '',
-    imageUrl: '',
+    imageUrl: '', // This will now store the Appwrite File ID
     content: '',
     seriesId: '',
     keyTakeaways: [],
     relatedArticles: [],
   });
+  const [imageFile, setImageFile] = useState(null); // State for the selected image file
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isEditing) {
-      const existingArticle = MOCK_DATA.allArticles[id];
-      if (existingArticle) {
-        setArticleData({
-          ...existingArticle,
-          keyTakeaways: existingArticle.keyTakeaways || [],
-          relatedArticles: existingArticle.relatedArticles || [],
-        });
+    // If we are editing, fetch the article data from Appwrite
+    const fetchArticle = async () => {
+      if (isEditing) {
+        try {
+          setLoading(true);
+          const document = await databases.getDocument(DATABASE_ID, ARTICLES_COLLECTION_ID, id);
+          setArticleData({
+            title: document.title,
+            author: document.author,
+            category: document.category || '',
+            excerpt: document.excerpt || '',
+            imageUrl: document.imageUrl || '',
+            content: document.content,
+            seriesId: document.seriesId || '',
+            keyTakeaways: document.keyTakeaways || [],
+            relatedArticles: document.relatedArticles || [],
+          });
+        } catch (err) {
+          setError('Failed to fetch article data.');
+          console.error(err);
+        } finally {
+          setLoading(false);
+        }
       }
-    }
+    };
+    fetchArticle();
   }, [id, isEditing]);
+
+  // Set the author field automatically when the component loads for a new article
+  useEffect(() => {
+    if (!isEditing && currentUser) {
+      setArticleData(prev => ({ ...prev, author: currentUser.name }));
+    }
+  }, [isEditing, currentUser]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setArticleData(prev => ({ ...prev, [name]: value }));
   };
 
-  // The onChange handler for SunEditor is the same as for ReactQuill
+  const handleFileChange = (e) => {
+    if (e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
+
   const handleContentChange = (value) => {
     setArticleData(prev => ({ ...prev, content: value }));
   };
@@ -56,18 +99,66 @@ export default function AdminArticleForm() {
     setArticleData(prev => ({ ...prev, keyTakeaways: takeaways }));
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submitting Article Data:', articleData);
-    alert('Article saved! (Check console for data)');
-    navigate('/admin/articles');
+    setError('');
+    setLoading(true);
+
+    let finalImageUrl = articleData.imageUrl;
+
+    try {
+      // Step 1: Upload image if a new one is selected
+      if (imageFile) {
+        const uploadedFile = await storage.createFile(
+          IMAGE_BUCKET_ID,
+          ID.unique(),
+          imageFile
+        );
+        finalImageUrl = uploadedFile.$id; // Get the ID of the uploaded file
+      }
+
+      const dataToSave = { ...articleData, imageUrl: finalImageUrl };
+
+      if (isEditing) {
+        // --- Update existing document ---
+        await databases.updateDocument(
+          DATABASE_ID,
+          ARTICLES_COLLECTION_ID,
+          id,
+          dataToSave
+        );
+        alert('Article updated successfully!');
+      } else {
+        // --- Create new document ---
+        await databases.createDocument(
+          DATABASE_ID,
+          ARTICLES_COLLECTION_ID,
+          ID.unique(),
+          dataToSave,
+          [
+            Permission.read(Role.any()), // Anyone can view this article
+            Permission.update(Role.user(currentUser.$id)), // The author can update it
+            Permission.delete(Role.user(currentUser.$id)), // The author can delete it
+          ]
+        );
+        alert('Article created successfully!');
+      }
+      navigate('/admin/articles');
+    } catch (err) {
+      setError('Failed to save article. Please try again.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // --- Data for dropdowns ---
+  // --- Data for dropdowns (still from mock data for now) ---
   const authors = [...new Set(Object.values(MOCK_DATA.allArticles).map(a => a.author))];
   const categories = [...new Set(Object.values(MOCK_DATA.allArticles).map(a => a.category).filter(Boolean))];
   const allArticleOptions = Object.entries(MOCK_DATA.allArticles).map(([articleId, article]) => ({ id: articleId, title: article.title }));
   const seriesOptions = Object.values(MOCK_DATA.series);
+
+  if (loading && isEditing) return <p>Loading article...</p>;
 
   return (
     <div>
@@ -84,23 +175,10 @@ export default function AdminArticleForm() {
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="content">Content</label>
-              {/* Replace ReactQuill with SunEditor */}
               <SunEditor
                 setContents={articleData.content}
                 onChange={handleContentChange}
-                setOptions={{
-                  height: 400,
-                  buttonList: [
-                    ['undo', 'redo'],
-                    ['font', 'fontSize', 'formatBlock'],
-                    ['bold', 'underline', 'italic', 'strike', 'subscript', 'superscript'],
-                    ['removeFormat'],
-                    ['outdent', 'indent'],
-                    ['align', 'horizontalRule', 'list', 'lineHeight'],
-                    ['table', 'link', 'image'],
-                    ['fullScreen', 'showBlocks', 'codeView'],
-                  ],
-                }}
+                setOptions={{ height: 400, buttonList: [['undo', 'redo'], ['font', 'fontSize', 'formatBlock'], ['bold', 'underline', 'italic'], ['align', 'list'], ['table', 'link', 'image']] }}
               />
             </div>
             <div>
@@ -113,10 +191,7 @@ export default function AdminArticleForm() {
           <div className="lg:col-span-1 space-y-6">
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="author">Author</label>
-              <select id="author" name="author" value={articleData.author} onChange={handleChange} className="shadow border rounded w-full py-2 px-3 text-gray-700">
-                <option value="">Select an Author</option>
-                {authors.map(author => <option key={author} value={author}>{author}</option>)}
-              </select>
+              <input id="author" name="author" type="text" value={articleData.author} onChange={handleChange} className="shadow border rounded w-full py-2 px-3 text-gray-700 bg-gray-100" readOnly />
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="category">Category</label>
@@ -126,8 +201,21 @@ export default function AdminArticleForm() {
               </select>
             </div>
             <div>
-              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="imageUrl">Featured Image URL</label>
-              <input id="imageUrl" name="imageUrl" type="text" value={articleData.imageUrl} onChange={handleChange} className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700" />
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="imageFile">Featured Image</label>
+              {articleData.imageUrl && !imageFile && (
+                <img
+                  src={storage.getFilePreview(IMAGE_BUCKET_ID, articleData.imageUrl)}
+                  alt="Current featured"
+                  className="w-full h-32 object-cover rounded-md mb-2"
+                />
+              )}
+              <input
+                id="imageFile"
+                name="imageFile"
+                type="file"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+              />
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="seriesId">Part of a Series</label>
@@ -151,12 +239,14 @@ export default function AdminArticleForm() {
           </div>
         </div>
 
+        {error && <p className="text-sm text-center text-red-500 mt-4">{error}</p>}
+
         <div className="flex items-center justify-end mt-8 pt-6 border-t border-gray-200">
           <Link to="/admin/articles" className="text-gray-600 hover:text-gray-800 mr-4">
             Cancel
           </Link>
-          <button type="submit" className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-            Save Article
+          <button type="submit" disabled={loading} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300">
+            {loading ? 'Saving...' : 'Save Article'}
           </button>
         </div>
       </form>

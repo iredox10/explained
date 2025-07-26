@@ -1,0 +1,4 @@
+
+const DATABASE_ID = '6885112e000227dd70e8';
+const ARTICLES_COLLECTION_ID = '68853dd5002eaf879e95';
+const IMAGE_BUCKET_ID = '6885418f0020cc88b27f'; // Add your Bucket ID here

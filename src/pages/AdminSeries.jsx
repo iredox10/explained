@@ -1,12 +1,47 @@
 
 // src/pages/AdminSeries.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MOCK_DATA } from '../data/mockData';
+import { databases } from '../appwrite';
 import { FiEdit, FiTrash2, FiPlusCircle } from 'react-icons/fi';
 
+// --- Appwrite Configuration ---
+const DATABASE_ID = '6885112e000227dd70e8';
+const SERIES_COLLECTION_ID = '68854f880036d8a30a8d';
+
 export default function AdminSeries() {
-  const seriesList = Object.values(MOCK_DATA.series);
+  const [seriesList, setSeriesList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSeries = async () => {
+      setLoading(true);
+      try {
+        const response = await databases.listDocuments(DATABASE_ID, SERIES_COLLECTION_ID);
+        setSeriesList(response.documents);
+      } catch (error) {
+        console.error("Failed to fetch series:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSeries();
+  }, []);
+
+  const handleDelete = async (seriesId) => {
+    if (window.confirm("Are you sure you want to delete this series?")) {
+      try {
+        await databases.deleteDocument(DATABASE_ID, SERIES_COLLECTION_ID, seriesId);
+        setSeriesList(seriesList.filter(series => series.$id !== seriesId));
+        alert("Series deleted successfully!");
+      } catch (error) {
+        console.error("Failed to delete series:", error);
+        alert("Failed to delete series.");
+      }
+    }
+  };
+
+  if (loading) return <p>Loading series...</p>;
 
   return (
     <div>
@@ -33,14 +68,14 @@ export default function AdminSeries() {
             </thead>
             <tbody>
               {seriesList.map(series => (
-                <tr key={series.id} className="border-b border-gray-200 hover:bg-gray-50">
+                <tr key={series.$id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="p-3 font-medium text-gray-800">{series.title}</td>
                   <td className="p-3 text-gray-600">{series.articles.length}</td>
                   <td className="p-3 text-right">
-                    <button className="text-blue-500 hover:text-blue-700 mr-4">
+                    <Link to={`/admin/series/${series.$id}`} className="text-blue-500 hover:text-blue-700 mr-4 inline-block">
                       <FiEdit size={18} />
-                    </button>
-                    <button className="text-red-500 hover:text-red-700">
+                    </Link>
+                    <button onClick={() => handleDelete(series.$id)} className="text-red-500 hover:text-red-700">
                       <FiTrash2 size={18} />
                     </button>
                   </td>

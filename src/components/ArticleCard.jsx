@@ -2,13 +2,33 @@
 // src/components/ArticleCard.js
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { storage } from '../appwrite'; // Import storage
+
+// --- Appwrite Configuration ---
+const IMAGE_BUCKET_ID = '6885418f0020cc88b27f'; // Add your Bucket ID here
 
 export default function ArticleCard({ story, large = false }) {
+  // Helper to get image URL. If it's an Appwrite ID, get preview. Otherwise, use placeholder.
+  const getImageUrl = (imageId) => {
+    if (!imageId) {
+      return 'https://placehold.co/600x400/e2e8f0/334155?text=No+Image';
+    }
+    // Check if it's a placeholder URL or an Appwrite ID
+    if (imageId.startsWith('http')) {
+      return imageId;
+    }
+    return storage.getFilePreview(IMAGE_BUCKET_ID, imageId);
+  };
+
   return (
     <div className="group flex flex-col">
       <div className="overflow-hidden rounded-lg">
         <Link to={`/article/${story.id}`}>
-          <img src={story.imageUrl} alt={story.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <img
+            src={getImageUrl(story.imageUrl)}
+            alt={story.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         </Link>
       </div>
       <div className="mt-4">

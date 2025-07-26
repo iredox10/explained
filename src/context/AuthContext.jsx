@@ -1,31 +1,64 @@
-
-// src/context/AuthContext.js
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { account, databases } from '../appwrite'; // Import from our appwrite.js
+import { ID } from 'appwrite';
 
 const AuthContext = createContext();
 
-// This is our mock "database" of users
-const USERS = {
-  admin: { name: 'Admin User', role: 'admin' },
-  author: { name: 'Aisha Bello', role: 'author' }, // We'll use Aisha as our example author
-};
+// --- Appwrite Database Configuration ---
+// TODO: Replace with your actual Database and Collection IDs from Appwrite
+const DATABASE_ID = '6885112e000227dd70e8';
+const USERS_COLLECTION_ID = '68851166000a041829a4';
 
 export function AuthProvider({ children }) {
-  // We'll set the initial user to be an author for demonstration
-  const [currentUser, setCurrentUser] = useState(USERS.author);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // In a real app, you'd have login/logout functions here
-  // For now, we can add a function to switch users for testing
-  const switchUser = (role) => {
-    setCurrentUser(USERS[role]);
+  useEffect(() => {
+    const checkLoggedInUser = async () => {
+      try {
+        const userAccount = await account.get();
+        // If user is logged in, fetch their custom data from the database
+        const userDocument = await databases.getDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          userAccount.$id // The user's ID is the document ID
+        );
+        setCurrentUser({ ...userAccount, ...userDocument });
+      } catch (err) {
+        // Not logged in
+        setCurrentUser(null);
+      }
+      setLoading(false);
+    };
+    checkLoggedInUser();
+  }, []);
+
+  const login = async (email, password) => {
+    await account.createEmailPasswordSession(email, password);
+    // After session is created, re-fetch user data to update context
+    const userAccount = await account.get();
+    const userDocument = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userAccount.$id
+    );
+    setCurrentUser({ ...userAccount, ...userDocument });
   };
 
-  const value = { currentUser, switchUser };
+  const logout = async () => {
+    await account.deleteSession('current');
+    setCurrentUser(null);
+  };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const value = { currentUser, login, logout };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }
 
-// Custom hook to easily access the auth context
 export function useAuth() {
   return useContext(AuthContext);
 }

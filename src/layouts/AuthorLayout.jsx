@@ -1,16 +1,16 @@
 
-// src/layouts/AdminLayout.js
+// src/layouts/AuthorLayout.js
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import AdminSidebar from '../components/AdminSidebar';
+import AuthorSidebar from '../components/AuthorSidebar';
 
-export default function AdminLayout() {
+export default function AuthorLayout() {
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <AdminSidebar />
+      <AuthorSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
-          <Outlet /> {/* This is where the nested admin routes will render */}
+          <Outlet />
         </main>
       </div>
     </div>
