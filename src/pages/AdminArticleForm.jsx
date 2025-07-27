@@ -1,20 +1,12 @@
-
 // src/pages/AdminArticleForm.js
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { MOCK_DATA } from '../data/mockData'; // We still use this for dropdowns
 import { useAuth } from '../context/AuthContext';
-import { databases, storage } from '../appwrite'; // Import storage
-import { ID, Permission, Role } from 'appwrite';
+import { databases, storage } from '../appwrite';
+import { ID, Permission, Role, Query } from 'appwrite';
 import SunEditor from 'suneditor-react';
 import 'suneditor/dist/css/suneditor.min.css';
-
-// --- Appwrite Configuration ---
-// TODO: Replace with your actual Database and Collection IDs
-
-const DATABASE_ID = '6885112e000227dd70e8';
-const ARTICLES_COLLECTION_ID = '68853dd5002eaf879e95';
-const IMAGE_BUCKET_ID = '6885418f0020cc88b27f'; // Add your Bucket ID here
+import { DATABASE_ID, ARTICLES_COLLECTION_ID, SERIES_COLLECTION_ID, IMAGE_BUCKET_ID } from '../appwriteConst';
 
 export default function AdminArticleForm() {
   const { id } = useParams();
@@ -27,22 +19,42 @@ export default function AdminArticleForm() {
     author: '',
     category: '',
     excerpt: '',
-    imageUrl: '', // This will now store the Appwrite File ID
+    imageUrl: '',
     content: '',
     seriesId: '',
     keyTakeaways: [],
     relatedArticles: [],
   });
-  const [imageFile, setImageFile] = useState(null); // State for the selected image file
-  const [loading, setLoading] = useState(false);
+
+  // State for dropdown options, fetched from Appwrite
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [seriesOptions, setSeriesOptions] = useState([]);
+  const [allArticleOptions, setAllArticleOptions] = useState([]);
+
+  const [imageFile, setImageFile] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // This useEffect now fetches all data needed for the form from Appwrite
   useEffect(() => {
-    // If we are editing, fetch the article data from Appwrite
-    const fetchArticle = async () => {
-      if (isEditing) {
-        try {
-          setLoading(true);
+    const fetchFormData = async () => {
+      setLoading(true);
+      try {
+        // Fetch all articles and series in parallel for the dropdowns
+        const [articlesResponse, seriesResponse] = await Promise.all([
+          databases.listDocuments(DATABASE_ID, ARTICLES_COLLECTION_ID, [Query.limit(100)]), // Get up to 100 articles for options
+          databases.listDocuments(DATABASE_ID, SERIES_COLLECTION_ID)
+        ]);
+
+        // Populate dropdown options from the fetched data
+        const allDocs = articlesResponse.documents;
+        setAllArticleOptions(allDocs.map(doc => ({ id: doc.$id, title: doc.title })));
+        const uniqueCategories = [...new Set(allDocs.map(doc => doc.category).filter(Boolean))];
+        setCategoryOptions(uniqueCategories);
+        setSeriesOptions(seriesResponse.documents);
+
+        // If we are editing an existing article, fetch its specific data
+        if (isEditing) {
           const document = await databases.getDocument(DATABASE_ID, ARTICLES_COLLECTION_ID, id);
           setArticleData({
             title: document.title,
@@ -55,18 +67,17 @@ export default function AdminArticleForm() {
             keyTakeaways: document.keyTakeaways || [],
             relatedArticles: document.relatedArticles || [],
           });
-        } catch (err) {
-          setError('Failed to fetch article data.');
-          console.error(err);
-        } finally {
-          setLoading(false);
         }
+      } catch (err) {
+        setError('Failed to load form data from the database.');
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchArticle();
+    fetchFormData();
   }, [id, isEditing]);
 
-  // Set the author field automatically when the component loads for a new article
   useEffect(() => {
     if (!isEditing && currentUser) {
       setArticleData(prev => ({ ...prev, author: currentUser.name }));
@@ -107,20 +118,18 @@ export default function AdminArticleForm() {
     let finalImageUrl = articleData.imageUrl;
 
     try {
-      // Step 1: Upload image if a new one is selected
       if (imageFile) {
         const uploadedFile = await storage.createFile(
           IMAGE_BUCKET_ID,
           ID.unique(),
           imageFile
         );
-        finalImageUrl = uploadedFile.$id; // Get the ID of the uploaded file
+        finalImageUrl = uploadedFile.$id;
       }
 
       const dataToSave = { ...articleData, imageUrl: finalImageUrl };
 
       if (isEditing) {
-        // --- Update existing document ---
         await databases.updateDocument(
           DATABASE_ID,
           ARTICLES_COLLECTION_ID,
@@ -129,16 +138,15 @@ export default function AdminArticleForm() {
         );
         alert('Article updated successfully!');
       } else {
-        // --- Create new document ---
         await databases.createDocument(
           DATABASE_ID,
           ARTICLES_COLLECTION_ID,
           ID.unique(),
           dataToSave,
           [
-            Permission.read(Role.any()), // Anyone can view this article
-            Permission.update(Role.user(currentUser.$id)), // The author can update it
-            Permission.delete(Role.user(currentUser.$id)), // The author can delete it
+            Permission.read(Role.any()),
+            Permission.update(Role.user(currentUser.$id)),
+            Permission.delete(Role.user(currentUser.$id)),
           ]
         );
         alert('Article created successfully!');
@@ -152,13 +160,7 @@ export default function AdminArticleForm() {
     }
   };
 
-  // --- Data for dropdowns (still from mock data for now) ---
-  const authors = [...new Set(Object.values(MOCK_DATA.allArticles).map(a => a.author))];
-  const categories = [...new Set(Object.values(MOCK_DATA.allArticles).map(a => a.category).filter(Boolean))];
-  const allArticleOptions = Object.entries(MOCK_DATA.allArticles).map(([articleId, article]) => ({ id: articleId, title: article.title }));
-  const seriesOptions = Object.values(MOCK_DATA.series);
-
-  if (loading && isEditing) return <p>Loading article...</p>;
+  if (loading) return <p>Loading form data...</p>;
 
   return (
     <div>
@@ -167,7 +169,6 @@ export default function AdminArticleForm() {
       </h3>
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content Column */}
           <div className="lg:col-span-2 space-y-6">
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="title">Title</label>
@@ -178,7 +179,16 @@ export default function AdminArticleForm() {
               <SunEditor
                 setContents={articleData.content}
                 onChange={handleContentChange}
-                setOptions={{ height: 400, buttonList: [['undo', 'redo'], ['font', 'fontSize', 'formatBlock'], ['bold', 'underline', 'italic'], ['align', 'list'], ['table', 'link', 'image']] }}
+                setOptions={{
+                  height: 400,
+                  buttonList: [
+                    ['undo', 'redo'], ['font', 'fontSize', 'formatBlock'], ['paragraphStyle', 'blockquote'],
+                    ['bold', 'underline', 'italic', 'strike', 'subscript', 'superscript'],
+                    ['fontColor', 'hiliteColor', 'textStyle'], ['removeFormat'], ['outdent', 'indent'],
+                    ['align', 'horizontalRule', 'list', 'lineHeight'], ['table', 'link', 'image', 'video'],
+                    ['fullScreen', 'showBlocks', 'codeView'], ['preview', 'print'],
+                  ],
+                }}
               />
             </div>
             <div>
@@ -187,7 +197,6 @@ export default function AdminArticleForm() {
             </div>
           </div>
 
-          {/* Metadata Column */}
           <div className="lg:col-span-1 space-y-6">
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="author">Author</label>
@@ -197,7 +206,7 @@ export default function AdminArticleForm() {
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="category">Category</label>
               <select id="category" name="category" value={articleData.category} onChange={handleChange} className="shadow border rounded w-full py-2 px-3 text-gray-700">
                 <option value="">Select a Category</option>
-                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {categoryOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
             <div>
@@ -221,7 +230,7 @@ export default function AdminArticleForm() {
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="seriesId">Part of a Series</label>
               <select id="seriesId" name="seriesId" value={articleData.seriesId} onChange={handleChange} className="shadow border rounded w-full py-2 px-3 text-gray-700">
                 <option value="">None</option>
-                {seriesOptions.map(series => <option key={series.id} value={series.id}>{series.title}</option>)}
+                {seriesOptions.map(series => <option key={series.$id} value={series.$id}>{series.title}</option>)}
               </select>
             </div>
             <div>

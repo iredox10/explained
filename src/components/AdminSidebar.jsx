@@ -2,12 +2,12 @@
 // src/components/AdminSidebar.js
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FiGrid, FiFileText, FiGitMerge, FiList, FiMove, FiLogOut } from 'react-icons/fi';
+import { FiGrid, FiFileText, FiGitMerge, FiList, FiMove, FiLogOut, FiUsers } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
 const AdminNavLink = ({ to, icon, children }) => {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const isActive = location.pathname.startsWith(to); // Use startsWith for active state
   return (
     <Link
       to={to}
@@ -42,12 +42,11 @@ export default function AdminSidebar() {
       <div className="flex flex-col flex-1 justify-between overflow-y-auto">
         <nav className="flex-1 px-2 py-4 bg-gray-800">
           <AdminNavLink to="/admin" icon={<FiGrid className="h-6 w-6" />}>Dashboard</AdminNavLink>
-          <AdminNavLink to="/admin/articles" icon={<FiFileText className="h-6 w-6" />}>
-            {currentUser.role === 'admin' ? 'Articles' : 'My Articles'}
-          </AdminNavLink>
+          <AdminNavLink to="/admin/articles" icon={<FiFileText className="h-6 w-6" />}>Articles</AdminNavLink>
 
           {currentUser.role === 'admin' && (
             <>
+              <AdminNavLink to="/admin/authors" icon={<FiUsers className="h-6 w-6" />}>Authors</AdminNavLink>
               <AdminNavLink to="/admin/series" icon={<FiList className="h-6 w-6" />}>Series</AdminNavLink>
               <AdminNavLink to="/admin/timelines" icon={<FiGitMerge className="h-6 w-6" />}>Timelines</AdminNavLink>
               <AdminNavLink to="/admin/ordering" icon={<FiMove className="h-6 w-6" />}>Content Order</AdminNavLink>

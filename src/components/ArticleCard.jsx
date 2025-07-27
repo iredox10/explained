@@ -3,9 +3,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { storage } from '../appwrite'; // Import storage
-
-// --- Appwrite Configuration ---
-const IMAGE_BUCKET_ID = '6885418f0020cc88b27f'; // Add your Bucket ID here
+import { IMAGE_BUCKET_ID } from '../appwriteConst'; // Import Bucket ID
 
 export default function ArticleCard({ story, large = false }) {
   // Helper to get image URL. If it's an Appwrite ID, get preview. Otherwise, use placeholder.
@@ -13,16 +11,21 @@ export default function ArticleCard({ story, large = false }) {
     if (!imageId) {
       return 'https://placehold.co/600x400/e2e8f0/334155?text=No+Image';
     }
-    // Check if it's a placeholder URL or an Appwrite ID
+    // Check if it's a placeholder URL (from old mock data) or a real Appwrite ID
     if (imageId.startsWith('http')) {
       return imageId;
     }
-    return storage.getFilePreview(IMAGE_BUCKET_ID, imageId);
+    try {
+      return storage.getFilePreview(IMAGE_BUCKET_ID, imageId);
+    } catch (error) {
+      console.error("Could not get image preview:", error);
+      return 'https://placehold.co/600x400/e2e8f0/334155?text=Image+Error';
+    }
   };
 
   return (
     <div className="group flex flex-col">
-      <div className="overflow-hidden rounded-lg">
+      <div className="overflow-hidden rounded-lg bg-slate-100">
         <Link to={`/article/${story.id}`}>
           <img
             src={getImageUrl(story.imageUrl)}

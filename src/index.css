@@ -1,1 +1,13 @@
 @import 'tailwindcss';
+
+body {
+  @apply font-sans; /* This sets the default font for the whole site */
+}
+@layer base {
+  .prose blockquote {
+    @apply font-semibold italic text-slate-900 border-l-8 border-yellow-400 pl-6;
+  }
+  .prose blockquote p {
+    @apply text-2xl leading-relaxed my-8 ;
+  }
+}

@@ -1,26 +1,65 @@
-
-// src/pages/ExplainersPage.js
-import React from 'react';
-import { MOCK_DATA } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { databases } from '../appwrite';
+import { Query } from 'appwrite';
 import ArticleCard from '../components/ArticleCard';
-import { FiUser, FiCalendar } from 'react-icons/fi';
-import { Link } from 'react-router-dom';
+import { DATABASE_ID, ARTICLES_COLLECTION_ID, LAYOUTS_COLLECTION_ID } from '../appwriteConst';
 
 export default function ExplainersPage() {
-  // Get the layout from the new pageLayouts object
-  const { featuredStoryId, articleIds } = MOCK_DATA.pageLayouts.explainersPage;
+  const [featuredStory, setFeaturedStory] = useState(null);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Find the full article data using the IDs from the layout
-  const allStories = [
-    MOCK_DATA.homepage.mainStory,
-    ...MOCK_DATA.homepage.topStories,
-    ...MOCK_DATA.homepage.secondaryStories,
-    MOCK_DATA.explainersPage.featuredStory,
-    ...MOCK_DATA.explainersPage.articles,
-  ];
+  useEffect(() => {
+    const fetchPageData = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // 1. Fetch the layout document for the explainers page
+        const layoutResponse = await databases.listDocuments(
+          DATABASE_ID,
+          LAYOUTS_COLLECTION_ID,
+          [Query.equal('pageName', 'explainersPage')]
+        );
 
-  const featuredStory = allStories.find(story => story.id === featuredStoryId);
-  const articles = articleIds.map(id => allStories.find(story => story.id === id)).filter(Boolean);
+        if (layoutResponse.documents.length === 0) {
+          throw new Error("Explainers page layout not found in the database.");
+        }
+        const layout = layoutResponse.documents[0];
+        const { featuredStoryId, articleIds } = layout;
+
+        // 2. Create a clean list of all unique article IDs needed, filtering out any missing ones
+        const allIds = [...new Set([featuredStoryId, ...articleIds])].filter(Boolean);
+
+        if (allIds.length === 0) {
+          setLoading(false);
+          return; // Nothing to fetch
+        }
+
+        // 3. Fetch all required articles
+        const articlePromises = allIds.map(id =>
+          databases.getDocument(DATABASE_ID, ARTICLES_COLLECTION_ID, id)
+        );
+        const fetchedArticles = await Promise.all(articlePromises);
+
+        // 4. Map the fetched articles back to their respective sections
+        const articlesMap = new Map(fetchedArticles.map(doc => [doc.$id, doc]));
+
+        setFeaturedStory(articlesMap.get(featuredStoryId));
+        setArticles(articleIds.map(id => articlesMap.get(id)).filter(Boolean));
+
+      } catch (err) {
+        setError('Failed to load explainers page content. Please check your layout document in Appwrite.');
+        console.error("Failed to fetch explainers page data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPageData();
+  }, []);
+
+  if (loading) return <div className="text-center p-12">Loading...</div>;
+  if (error) return <div className="text-center p-12 text-red-500">{error}</div>;
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -31,32 +70,17 @@ export default function ExplainersPage() {
 
       {featuredStory && (
         <section className="mb-12">
-          <div className="group grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div className="overflow-hidden rounded-lg">
-              <Link to={`/article/${featuredStory.id}`}>
-                <img src={featuredStory.imageUrl} alt={featuredStory.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-              </Link>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-red-600">{featuredStory.category}</p>
-              <h2 className="text-3xl md:text-4xl font-bold mt-2 text-slate-900 group-hover:text-red-700 transition-colors">
-                <Link to={`/article/${featuredStory.id}`}>{featuredStory.title}</Link>
-              </h2>
-              <p className="text-slate-600 mt-4 text-lg">{featuredStory.excerpt}</p>
-              <div className="flex items-center space-x-4 text-sm text-slate-500 mt-4">
-                <div className="flex items-center space-x-2"><FiUser size={14} /><span>By {featuredStory.author}</span></div>
-                <div className="flex items-center space-x-2"><FiCalendar size={14} /><span>{featuredStory.date}</span></div>
-              </div>
-            </div>
-          </div>
+          {/* Using ArticleCard ensures the image URL is handled correctly */}
+          <ArticleCard story={{ ...featuredStory, id: featuredStory.$id }} large={true} />
         </section>
       )}
 
       <hr className="my-8 md:my-12 border-slate-200" />
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Using ArticleCard here also ensures correct image handling */}
         {articles.map(story => (
-          <ArticleCard key={story.id} story={story} />
+          <ArticleCard key={story.$id} story={{ ...story, id: story.$id }} />
         ))}
       </section>
     </div>

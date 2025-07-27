@@ -24,7 +24,9 @@ import AdminTimelines from './pages/AdminTimelines';
 import AdminTimelineForm from './pages/AdminTimelineForm';
 import AdminOrderManager from './pages/AdminOrderManager';
 import AuthorLayout from './layouts/AuthorLayout';
-import AuthorDashboard from './pages/AuthorDashboard'; // Import new page
+import AuthorDashboard from './pages/AuthorDashboard';
+import AdminAuthors from './pages/AdminAuthors'; // Import new page
+import AdminAuthorForm from './pages/AdminAuthorForm'; // Import new page
 
 // --- Layout Components ---
 const PublicLayout = () => (
@@ -60,6 +62,8 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="articles" element={<AdminArticles />} />
           <Route path="articles/:id" element={<AdminArticleForm />} />
+          <Route path="authors" element={<AdminAuthors />} /> {/* New route */}
+          <Route path="authors/:id" element={<AdminAuthorForm />} /> {/* New route */}
           <Route path="series" element={<AdminSeries />} />
           <Route path="series/:id" element={<AdminSeriesForm />} />
           <Route path="timelines" element={<AdminTimelines />} />
@@ -70,7 +74,6 @@ export default function App() {
         {/* Author Section */}
         <Route path="/author" element={<ProtectedRoute><AuthorLayout /></ProtectedRoute>}>
           <Route index element={<AuthorDashboard />} />
-          {/* Authors can reuse the AdminArticles and AdminArticleForm components */}
           <Route path="articles" element={<AdminArticles />} />
           <Route path="articles/:id" element={<AdminArticleForm />} />
         </Route>
