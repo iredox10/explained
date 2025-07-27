@@ -10,4 +10,10 @@ body {
   .prose blockquote p {
     @apply text-2xl leading-relaxed my-8 ;
   }
+  .prose p {
+    @apply text-xl leading-relaxed my-8 ;
+  }
+  .prose a{
+    @apply text-yellow-600 underline;
+  }
 }
